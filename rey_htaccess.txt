@@ -1,0 +1,677 @@
+/*******************************************/
+RewriteEngine On
+
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-l
+
+RewriteRule ^(.+)$ index.php?url=$1 [QSA,L]
+
+/*******************************************/
+
+<?php 
+	
+define('DS',DIRECTORY_SEPARATOR);
+define('ROOT',dirname(__FILE__).DS);
+define('PATH',ROOT.'app'.DS);
+define('base_url',"http://".$_SERVER["SERVER_NAME"]."/php_frame/");
+
+
+require_once PATH.'Request.php';
+require_once PATH.'Bootstrap.php';
+require_once PATH.'Controller.php';
+require_once PATH.'Model.php';
+require_once PATH.'Database.php';
+require_once PATH.'View.php';
+Bootstrap::run(new Request());
+
+/***************************************************/
+
+<?php 
+
+class Request
+{
+	private $controller;
+	private $method;
+	private $arguments;
+	
+	public function __construct(){
+
+		if(isset($_GET['url'])){
+			$url=filter_input(INPUT_GET,'url',FILTER_SANITIZE_URL);
+			$url=explode('/', $url);
+			$url=array_filter($url);
+
+			$this->controller=strtolower(array_shift($url));
+			$this->method=strtolower(array_shift($url));
+			$this->arguments=$url;
+		}
+
+			if (!$this->controller) {
+				$this->controller='index';
+			}
+
+			if (!$this->method) {
+				$this->method='index';
+			}
+
+			if (!$this->arguments) {
+				$this->arguments=array();
+			}
+	}
+
+	public function getController(){
+		return $this->controller;
+	}
+
+	public function getMethod(){
+		return $this->method;
+	}
+	public function getArguments(){
+		return $this->arguments;
+	}
+}
+
+/***********************************************************/
+
+<?php 
+class Bootstrap{
+
+	public static function run(Request $r){
+		$controller=$r->getController().'Controller';
+		$method=$r->getMethod();
+		$arguments=$r->getArguments();
+		$pathController=ROOT.'controllers'.DS.$controller.'.php';
+		//echo $pathController;exit;
+		if (is_readable($pathController)) {
+			require_once $pathController;
+			$controller=new $controller;
+
+			if (is_callable(array($controller, $method))){
+				$method=$r->getMethod();
+			}else{
+				$method='index';
+			}
+
+			if (isset($arguments)) {
+				call_user_func_array(array($controller, $method), $arguments);
+			}else{
+				call_user_func(array($controller, $method));
+			}
+		}else{
+			echo 'No Existe Controlador';
+			//header('location:'.base_url);
+		}
+	}
+}
+
+/****************************************************************/
+
+<?php 
+abstract class Controller{
+
+	protected $view;
+	abstract public function index();
+
+	public function __construct(){
+		$this->view=new View(new Request);
+		
+	}
+
+	protected function loadModel($model){
+		$model=$model.'Model';
+		$pathModel=ROOT.'models'.DS.$model.'.php';
+
+		if (is_readable($pathModel)) {
+			require_once $pathModel;
+			$model=new $model;
+			return $model;
+		}else{
+			echo 'Error de modelo';
+		}
+	}
+}
+
+/*******************************************************************/
+
+<?php 
+class Database extends PDO{
+	private $host='localhost';
+	private $user='root';
+	private $pass='';
+	private $base='test';
+	public function __construct(){
+		parent::__construct('mysql:host='.$this->host.';dbname='.$this->base,$this->user,$this->pass);
+	}
+}
+
+/********************************************************************/
+
+<?php 
+class Model{
+	protected $db;
+	public function __construct(){
+		$this->db=new Database();
+	}
+}
+
+/********************************************************************/
+
+<?php 
+class View{
+	private $controller;
+
+	public function __construct(Request $r){
+		$this->controller=$r->getController();
+	}
+
+	public function render($view){
+		$pathView=ROOT.'views'.DS.$this->controller.DS.$view.'.php';
+		if (is_readable($pathView)) {
+			if ($this->controller=='index') {
+			require_once ROOT.'views'.DS.'layout'.DS.'header.php';
+			require_once $pathView;
+			require_once ROOT.'views'.DS.'layout'.DS.'footer.php';
+			}
+		}else{
+			echo 'Error en la vista';
+		}
+	}
+}
+
+/*************************************************************************/
+
+<?php 
+
+class indexController extends Controller
+{
+	
+	public function __construct()
+	{
+		parent::__construct();
+	}
+
+	public function index(){
+		$proceso=$this->loadModel('index');
+		$data=$proceso->lista('40404040');
+		$this->view->data=$data;
+		$this->view->render('index');
+		
+	}
+
+	public function post_index(){
+		$proceso=$this->loadModel('index');
+		$data=$proceso->lista('40404040');
+		echo json_encode($data);
+	}
+
+	public function store(){
+		$proceso=$this->loadModel('index');
+		$data=$proceso->store($_POST['dni'],$_POST['nombre'],$_POST['apellido']);
+		//echo json_encode($data);
+
+	}
+
+	public function update(){
+		$proceso=$this->loadModel('index');
+
+		$data=$proceso->update($_POST['dni'],$_POST['nombre'],$_POST['apellido']);
+	}
+
+	public function delete(){
+		$proceso=$this->loadModel('index');
+		
+		$data=$proceso->delete($_POST['dni']);
+	}
+}
+
+/**************************************************************/
+
+<?php 
+class indexModel extends Model
+{
+	
+	public function __construct()
+	{
+		parent::__construct();
+	}
+
+	public function lista($dni){
+		//$query=$this->db->prepare('CALL promocion()');
+		$query=$this->db->prepare('CALL upt_rey("'.$dni.'")');
+		$query->setFetchMode(PDO::FETCH_ASSOC);
+		$query->execute();
+		$data=$query->fetchAll();
+		return $data;
+	}
+
+	public function store($dni,$nombre,$apellido){
+		//$query=$this->db->prepare('CALL promocion()');
+		$query=$this->db->prepare('INSERT INTO empleado(dni,contrasena,nombre,apellido,privilegio) VALUES("'.$dni.'",11111,"'.$nombre.'","'.$apellido.'","Gerente")');
+		$query->setFetchMode(PDO::FETCH_ASSOC);
+		$query->execute();
+		$data=$query->fetchAll();
+		return $data;
+	}
+
+	public function update($dni,$nombre,$apellido){
+		//$query=$this->db->prepare('CALL promocion()');
+		$query=$this->db->prepare('UPDATE empleado SET nombre="'.$nombre.'",apellido="'.$apellido.'" WHERE dni="'.$dni.'"');
+		$query->setFetchMode(PDO::FETCH_ASSOC);
+		$query->execute();
+		$data=$query->fetchAll();
+		return $data;
+	}
+
+	public function delete($dni){
+		//$query=$this->db->prepare('CALL promocion()');
+		$query=$this->db->prepare('DELETE FROM empleado  WHERE dni="'.$dni.'"');
+		$query->setFetchMode(PDO::FETCH_ASSOC);
+		$query->execute();
+		$data=$query->fetchAll();
+		return $data;
+	}
+}
+
+/****************************************************************/
+
+
+<h1>soy la vista de controller</h1>
+
+<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-whatever="@getbootstrap">Nuevo Usuario</button>
+
+<div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="exampleModalLabel">New message</h4>
+      </div>
+      <div class="modal-body">
+        <form>
+          <div class="form-group">
+            <label for="recipient-name" class="control-label">Dni</label>
+            <input type="text" class="form-control" id="dni">
+          </div>
+          <div class="form-group">
+            <label for="message-text" class="control-label">Nombre</label>
+            <input type="text" class="form-control" id="nombre">
+          </div>
+          <div class="form-group">
+            <label for="message-text" class="control-label">Apellido</label>
+            <input type="text" class="form-control" id="apellido">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="btnUsuario">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="modal fade" id="exampleModal1" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="exampleModalLabel">New message</h4>
+      </div>
+      <div class="modal-body">
+        <form>
+          <div class="form-group">
+            <label for="recipient-name" class="control-label">Dni</label>
+            <input type="text" class="form-control" id="dni1">
+          </div>
+          <div class="form-group">
+            <label for="message-text" class="control-label">Nombre</label>
+            <input type="text" class="form-control" id="nombre1">
+          </div>
+          <div class="form-group">
+            <label for="message-text" class="control-label">Apellido</label>
+            <input type="text" class="form-control" id="apellido1">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="btnUpdate">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<table>
+	<thead>
+		<th>dni</th>
+		<th>nombre</th>
+		<th>apellido</th>
+	</thead>
+	<tbody id="lista">
+	</tbody>
+</table>
+<script type="text/javascript" src="<?php echo base_url; ?>assets/jquery/jquery.js"></script>
+<!-- Latest compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script type="text/javascript">
+
+	$(document).on('ready',function(){
+		listar();
+
+	});
+
+	function listar(){
+		var lista=$('#lista');
+        lista.html('');
+		$.ajax({
+			url:'<?php echo base_url; ?>index/post_index',
+			type:'POST',
+			data:'',
+			success:function(res){
+				var obj=JSON.parse(res);
+				$.each(obj,function(key,val){
+					          var tr=$("<tr>");
+                              tr.html("<td>"+val.dni+"</td>"+
+                              		"<td>"+val.nombre+"</td>"+
+                              		"<td>"+val.apellido+"</td>"+
+                              		"<td><button data-dni='"+val.dni+"' data-nombre='"+val.nombre+"' data-apellido='"+val.apellido+"' type='button' class='btn btn-warning editado' data-toggle='modal' data-target='#exampleModal1' data-whatever='@getbootstrap'>Editar Usuario</button></td>"+
+                              		"<td><button data-dni='"+val.dni+"' data-nombre='"+val.nombre+"' data-apellido='"+val.apellido+"' type='button' data-dni='"+val.dni+"' class='btn btn-danger eliminar'>Eliminar Usuario</button></td>"
+                              		
+                                 );
+                lista.append(tr);
+				});
+			}
+		});
+	}
+
+	$("#btnUsuario").on('click',function(e){
+		var dni=$('#dni').val();
+		var nombre=$('#nombre').val();
+		var apellido=$('#apellido').val();
+
+		$.ajax({
+			url:'<?php echo base_url; ?>index/store',
+			type:'POST',
+			data:'dni='+dni+'&nombre='+nombre+'&apellido='+apellido,
+			success:function(res){
+				listar();
+            
+			}
+			});
+			
+		});
+
+		$(document).on('click','.editado',function(e){
+		$('#dni1').val($(this).attr('data-dni'));
+		$('#nombre1').val($(this).attr('data-nombre'));
+		$('#apellido1').val($(this).attr('data-apellido'));
+		
+			
+		});
+
+		$('#btnUpdate').on('click',function(e){
+		var dni1=$('#dni1').val();
+		var nombre1=$('#nombre1').val();
+		var apellido1=$('#apellido1').val();
+		
+		$.ajax({
+			url:'<?php echo base_url; ?>index/update',
+			type:'POST',
+			data:'dni='+dni1+'&nombre='+nombre1+'&apellido='+apellido1,
+			success:function(res){
+				listar();
+            
+			}
+			});
+			
+		});
+
+		$(document).on('click','.eliminar',function(e){
+			var dni2=$(this).attr('data-dni');
+	
+			$.ajax({
+			url:'<?php echo base_url; ?>index/delete',
+			type:'POST',
+			data:'dni='+dni2,
+			success:function(res){
+				listar();
+            
+			}
+			});
+		});
+		
+
+</script>
+
+/**************************************************************************/
+
+mysql
+
+DELIMITER //
+CREATE DEFINER=`root`@`%` PROCEDURE `sp_kardex`()
+BEGIN
+
+START TRANSACTION;
+
+-- Marcar Registros a Procesar
+update utt_proceso7b set flagC=2 where flagC=0;
+
+-- compras Consignacion -> Libro Consignaciones
+Insert into utt_libro_consig (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intEntrada,periodoF)
+select CONCAT(substring(campo1,7,4),substring(campo1,4,2)) as intPeriodo,
+CONCAT(substring(campo1,7,4),'-',substring(campo1,4,2),'-',substring(campo1,1,2)) as dtFecha,
+campo3 as strTipoMov,
+tipodoc as strDoc,
+serie as strDocSerie,
+numero as strDocNumero,
+campo16 as strDniRuc,
+campo15 as strNombre,
+campo7 as strCodigo,
+campo10 as strItem,
+campo11 as strProducto,
+campo22 as intEntrada,
+periodoF
+from utt_proceso7b 
+where campo3 = 'Compra' and campo14 like 'Alb%' and coalesce(campo10,'')!='' and flagC=2;
+
+-- Compras directas -> Kardek valorizado
+Insert into utt_kardex_valor (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intEntrada,numPrecioE,periodoF)
+select CONCAT(substring(campo1,7,4),substring(campo1,4,2)) as intPeriodo,
+CONCAT(substring(campo1,7,4),'-',substring(campo1,4,2),'-',substring(campo1,1,2)) as dtFecha,
+campo3 as strTipoMov,
+tipodoc as strDoc,
+serie as strDocSerie,
+numero as strDocNumero,
+campo16 as strDniRuc,
+campo15 as strNombre,
+campo7 as strCodigo,
+campo10 as strItem,
+campo11 as strProducto,
+campo22 as intEntrada,
+campo24 as numPrecioE,
+periodoF
+from utt_proceso7b 
+where campo3 = 'Compra' and campo14 like 'Fac%' and coalesce(campo10,'')!='' and flagC=2;
+
+-- Temporal de ventas
+DROP TABLE IF EXISTS dealers.tmp_vta;
+CREATE TEMPORARY TABLE tmp_vta AS
+select CONCAT(substring(campo1,7,4),substring(campo1,4,2)) as intPeriodo,
+CONCAT(substring(campo1,7,4),'-',substring(campo1,4,2),'-',substring(campo1,1,2)) as dtFecha,
+campo3 as strTipoMov,
+tipodoc as strDoc,
+serie as strDocSerie,
+numero as strDocNumero,
+campo16 as strDniRuc,
+campo15 as strNombre,
+campo7 as strCodigo,
+campo10 as strItem,
+campo11 as strProducto,
+campo22 as intSalida,
+campo23 as numprecioS,
+0 as consignacion,
+periodoF
+from utt_proceso7b 
+where campo3 = 'Venta' and coalesce(campo10,'')!='' and flagC=2;
+--
+Create Index idx_tmp_vta ON tmp_vta (strItem);
+--
+Update tmp_vta a
+INNER JOIN utt_libro_consig b ON a.strItem=b.strItem AND b.strTipoMov='Compra'
+SET a.consignacion = 1
+WHERE a.strItem=b.strItem AND b.strTipoMov='Compra';
+
+-- Ventas con ingreso por Consignacion
+INSERT INTO utt_libro_consig (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intSalida,periodoF)
+SELECT intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intSalida,periodoF FROM tmp_vta WHERE consignacion=1;
+
+-- Ventas para el kardex valorizado
+Insert into utt_kardex_valor (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intSalida,numPrecioS,periodoF)
+SELECT intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intSalida,numPrecioS,periodoF FROM tmp_vta WHERE consignacion=1;
+
+-- Kardex valorizado - Compras facturacion consignacion
+Insert into utt_kardex_valor (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intEntrada,numPrecioE,flagP,detP,periodoF)
+select b.strperiodo,
+(case when coalesce(b.strperiodo,'')='' then a.dtFecha else b.dtfecha end) as dtfecha,
+'Compra' as strTipoMov,strDoc,substring(campo3,4,4) as strDocSerie,
+substring(campo3,9,8) as strDocNumero,'' as strDniRuc,'America M?vil Per? SAC' as strNombre,a.strCodigo,
+a.strItem, a.strProducto,a.intSalida as intEntrada, campo25 as numPrecioE,
+(case when coalesce(b.strperiodo,'')='' then 1 else 0 end) as flagP,
+(case when coalesce(b.strperiodo,'')='' then concat('Item no figura en alguna Factura emitida por claro FV ',a.dtfecha) else '' end) as detP,
+periodoF
+from tmp_vta a
+left outer join utt_proceso6b b ON a.strItem=b.campo11
+where consignacion=1;
+
+-- Devolucion de consignaciones a CLARO
+Insert into utt_libro_consig (intPeriodo,dtFecha,strTipoMov,strDoc,strDocSerie,strDocNumero,strDniRuc,strNombre,strCodigo,strItem,strProducto,intDevolucion,periodoF)
+select CONCAT(substring(campo1,7,4),substring(campo1,4,2)) as intPeriodo,
+CONCAT(substring(campo1,7,4),'-',substring(campo1,4,2),'-',substring(campo1,1,2)) as dtFecha,
+campo3 as strTipoMov,
+tipodoc as strDoc,
+serie as strDocSerie,
+numero as strDocNumero,
+campo16 as strDniRuc,
+campo15 as strNombre,
+campo7 as strCodigo,
+campo10 as strItem,
+campo11 as strProducto,
+campo22 as intDevolucion,
+periodoF
+from utt_proceso7b
+where campo3='Traspaso' and campo5 like '%Devoluciones a Claro%' and coalesce(campo10,'')!='' and flagC=2;
+
+-- Marcar Registros a Procesados
+update utt_proceso7b set flagC=1 where flagC=2;
+
+-- Eeliminar Temporales
+Drop table tmp_vta;
+
+COMMIT;
+
+END//
+DELIMITER ;
+/***************************************************************************************************/
+-- Volcando estructura para procedimiento dealers.upt_proceso1
+
+
+DELIMITER //
+CREATE DEFINER=`root`@`%` PROCEDURE `upt_proceso1`( intId INT, strSD VARCHAR(30), numTC NUMERIC(10,2), strCM varchar(16), intNr INT )
+BEGIN
+--
+-- CUENTAS
+DECLARE strVC VARCHAR(16) DEFAULT '';
+SET strVC = (SELECT cuenta FROM utt_proceso1e WHERE proc=4 LIMIT 1);
+--
+UPDATE utt_proceso1f a
+INNER JOIN utt_proceso1d b ON b.strDoc=a.strDoc AND b.strSerie=a.strSerie SET a.A = b.strCuenta WHERE b.strDoc=a.strDoc AND b.strSerie=a.strSerie AND TRIM(a.A)='' AND a.intIdProceso=intId;
+--
+UPDATE utt_proceso1f SET V='00000001' WHERE V='11111111';
+--
+CREATE TEMPORARY TABLE tmp_cab AS
+( SELECT (@rownum:=@rownum+1) as intReg,CONCAT(strCM,LPAD(intNr +
+(@rownum:=@rownum) - 1,4,'0')) as
+ccompro,a.dtFecha,a.numImporte,a.strDoc,a.strNroDoc,a.strSerie
+FROM (SELECT @rownum:=0) r, utt_proceso1f a WHERE a.intIdProceso=intId AND a.A like '12%' );
+-- LIMPIAR TABLA CABECERA
+DELETE FROM utt_proceso1b WHERE intIdProceso=intId;
+-- INSERTAR TABLA CABECERA
+INSERT INTO utt_proceso1b
+SELECT intId as intIdProceso,
+   intReg,
+   strSD as csubdia,
+   a.ccompro,
+   DATE_FORMAT(a.dtFecha, '%y%m%d') as cfeccom,
+   'MN' as ccodmon,
+   'F' as csitua,
+   numTC as ctipcam,
+   'VENTA DE MERCADERIA' as cglose,
+   a.numImporte as ctotal,
+   'V' as ctipo,
+   'S' as cflag,
+   DATE_FORMAT(a.dtFecha, '%y%m%d') as cdate,
+   '10:00' as chora,
+   DATE_FORMAT(a.dtFecha, '%y%m%d') as cfeccam,
+   '' as cuser,
+   'FA' as corig,
+   'M' as cform,
+   '' as ctipcom,
+   '' as cextor
+FROM tmp_cab a
+ORDER BY a.dtFecha,a.strDoc,a.strSerie;
+-- TEMPORAL VENTAS EN CUOTAS
+CREATE TEMPORARY TABLE tmp_vta_cuo AS
+( SELECT DISTINCT strDoc,strNroDoc FROM utt_proceso1g WHERE intIdProceso=intId AND H LIKE '%CUOTA%' ); CREATE INDEX idx_tmp_vta_cuo ON tmp_vta_cuo (strDoc,strNroDoc);
+-- LIMPIAR TABLA DETALLE
+DELETE FROM utt_proceso1c WHERE intIdProceso=intId;
+-- INSERTAR TABLA DETALLE
+INSERT INTO utt_proceso1c
+SELECT intId as intIdProceso,
+   (@rownum:=@rownum+1) as intReg,
+   strSD as dsubdia,
+   t.ccompro AS dcompro,
+   CASE WHEN a.A like '12%' THEN '0001' WHEN a.A LIKE '40%' THEN '0002' 
+WHEN a.A like '70%' THEN '0003' ELSE '' END as dsecue,
+   a.cfeccom as dfeccom,
+   a.A as dcuenta,
+   a.V AS dcodane,
+   '' as dcencos,
+   'MN' as dcodmon,
+   (CASE WHEN a.O<0 AND a.U='D' THEN 'H' WHEN a.O<0 AND a.U='H' THEN 'D' 
+ELSE a.U END) as ddh,
+   a.numImporte as dimport,
+   a.strDoc as dtipdoc,
+   a.strNroDoc as dnumdoc,
+   a.cfeccom as dfecdoc,
+   a.cfeccom as dfecven,
+   '' as darea,
+   'S' as dflag,
+   '' as ddate,
+   UPPER(a.W) as dxglosa,
+   '0' as dusimpor,
+   a.numImporte as dmnimpor,
+   '' as dcodarc,
+   '' as dcodane2,
+   '' as dmedpag,
+   '' as dtipdor,
+   '' as dnumdor,
+   '' as dfecdo2,
+   '0' as digvcom,
+   '' as dtidref,
+   '' as dndoref,
+   '' as dfecref,
+   '' as dmaqref,
+   '0' as dbimref,
+   '0' as digvref
+FROM (SELECT @rownum:=0) r,utt_proceso1f a LEFT OUTER JOIN tmp_cab t ON a.strDoc=t.strDoc AND a.strNroDoc=t.strNroDoc WHERE a.intIdProceso=intId ORDER BY a.dtFecha,a.strDoc,a.strSerie;
+--
+UPDATE utt_proceso1c a
+INNER JOIN tmp_vta_cuo b ON a.dtipdoc=b.strDoc AND a.dnumdoc=b.strNroDoc SET a.dcuenta = strVC WHERE a.intIdProceso=intId AND a.dtipdoc=b.strDoc AND a.dnumdoc=b.strNroDoc AND a.dcuenta like '12%';
+--
+DROP TABLE tmp_cab;
+DROP TABLE tmp_vta_cuo;
+END//
+DELIMITER ;
+
